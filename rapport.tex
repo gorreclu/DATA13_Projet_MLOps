@@ -1,0 +1,499 @@
+\documentclass[a4paper,11pt]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, calc, backgrounds}
+
+% --- Colors ---
+\definecolor{primary}{HTML}{2563EB}
+\definecolor{secondary}{HTML}{475569}
+\definecolor{accent}{HTML}{059669}
+\definecolor{lightgray}{HTML}{F1F5F9}
+\definecolor{codebg}{HTML}{F8FAFC}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=primary,
+    urlcolor=primary,
+    citecolor=primary,
+}
+
+% --- Header/Footer ---
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{secondary}{DATA713 -- MLOps}}
+\fancyhead[R]{\small\textcolor{secondary}{Telecom Paris}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Listings ---
+\lstset{
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{lightgray},
+    columns=flexible,
+}
+
+% --- TikZ styles ---
+\tikzset{
+    service/.style={
+        rectangle, rounded corners=4pt, minimum width=3.2cm, minimum height=1cm,
+        draw=#1!60, fill=#1!8, text=black, font=\small\bfseries,
+        align=center, line width=0.8pt
+    },
+    service/.default=primary,
+    storage/.style={
+        cylinder, shape border rotate=90, aspect=0.25,
+        minimum width=2.4cm, minimum height=1.2cm,
+        draw=#1!60, fill=#1!8, text=black, font=\small\bfseries,
+        align=center, line width=0.8pt
+    },
+    storage/.default=secondary,
+    arrow/.style={-{Stealth[length=6pt]}, line width=0.8pt, color=secondary},
+    dashed arrow/.style={-{Stealth[length=6pt]}, line width=0.8pt, dashed, color=secondary!60},
+    group/.style={draw=secondary!30, fill=lightgray, rounded corners=6pt, inner sep=10pt},
+}
+
+\begin{document}
+
+% =====================================================================
+% TITLE PAGE
+% =====================================================================
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+
+{\Huge\bfseries\textcolor{primary}{House Price Prediction}}\\[0.5cm]
+{\LARGE\textcolor{secondary}{Plateforme MLOps End-to-End}}\\[2cm]
+
+{\Large DATA713 -- Mastere Specialise IA Expert Data}\\[0.3cm]
+{\Large Telecom Paris}\\[2cm]
+
+\rule{0.6\textwidth}{0.4pt}\\[1.5cm]
+
+{\large\textbf{Equipe :} [Noms des membres]}\\[0.5cm]
+{\large\textbf{Date :} \today}\\[0.5cm]
+{\large\textbf{Branche :} \texttt{Cyprien\_Minio}}\\[2cm]
+
+\vfill
+{\small Projet POC en une journee -- King County House Sales Dataset}
+\end{titlepage}
+
+% =====================================================================
+% TABLE OF CONTENTS
+% =====================================================================
+\tableofcontents
+\newpage
+
+% =====================================================================
+% 1. INTRODUCTION
+% =====================================================================
+\section{Introduction}
+
+Ce rapport presente la conception et la mise en oeuvre d'une plateforme MLOps complete
+pour la prediction des prix immobiliers dans le comte de King (Washington, USA).
+Le projet couvre l'ensemble du cycle de vie d'un modele de Machine Learning :
+de l'acquisition des donnees a la mise en production, en passant par l'entrainement
+automatise, le suivi des experiences, le monitoring et le deploiement.
+
+\subsection{Objectifs du projet}
+
+\begin{enumerate}
+    \item Extraction et preprocessing des donnees (Kaggle $\rightarrow$ MinIO)
+    \item Construction d'un modele ML (XGBoost + Optuna)
+    \item Stockage du modele sur un registry (MLflow Model Registry)
+    \item Pipeline de reentrainement automatise (Apache Airflow)
+    \item Suivi des experiences (MLflow Tracking)
+    \item API de serving (FastAPI)
+    \item Interface web (Gradio)
+    \item Continuous Training avec comparaison de modeles
+    \item Dockerisation + Kubernetes + CI/CD
+    \item Versionning et documentation (Git + GitHub)
+\end{enumerate}
+
+\subsection{Dataset}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Propriete} & \textbf{Valeur} \\
+\midrule
+Source & King County House Sales (Kaggle) \\
+Taille & 21 613 transactions \\
+Features & 21 variables \\
+Periode & Mai 2014 -- Mai 2015 \\
+Variable cible & \texttt{price} (USD) \\
+\bottomrule
+\end{tabular}
+\caption{Caracteristiques du dataset}
+\end{table}
+
+% =====================================================================
+% 2. ARCHITECTURE
+% =====================================================================
+\section{Architecture Globale}
+
+\subsection{Diagramme d'architecture}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=1.2cm and 1.8cm]
+
+    % --- User-facing layer ---
+    \node[service=accent] (webapp) {Gradio\\WebApp\\{\scriptsize :7860}};
+    \node[service=primary, below=of webapp] (api) {FastAPI\\API\\{\scriptsize :8000}};
+
+    % --- ML layer ---
+    \node[service=primary, below left=1.5cm and 2.5cm of api] (mlflow) {MLflow\\Tracking\\{\scriptsize :5000}};
+    \node[service=accent, below right=1.5cm and 2.5cm of api] (airflow) {Airflow\\Orchestration\\{\scriptsize :8080}};
+
+    % --- Storage layer ---
+    \node[storage=secondary, below=1.5cm of mlflow] (postgres) {PostgreSQL\\{\scriptsize :5432}};
+    \node[storage=accent, below=1.5cm of airflow] (minio) {MinIO S3\\{\scriptsize :9000}};
+
+    % --- Monitoring layer ---
+    \node[service=orange, right=2.5cm of api] (prometheus) {Prometheus\\{\scriptsize :9090}};
+    \node[service=orange, below=of prometheus] (grafana) {Grafana\\{\scriptsize :3000}};
+
+    % --- Arrows ---
+    \draw[arrow] (webapp) -- node[right, font=\scriptsize] {HTTP} (api);
+    \draw[arrow] (api) -- (mlflow);
+    \draw[arrow] (api.east) -- (prometheus.west);
+    \draw[dashed arrow] (prometheus) -- (grafana);
+
+    \draw[arrow] (mlflow) -- (postgres);
+    \draw[arrow] (airflow) -- (minio);
+    \draw[dashed arrow] (airflow.west) -- node[above, font=\scriptsize] {trigger} (mlflow.east);
+
+    % --- Group boxes ---
+    \begin{scope}[on background layer]
+        \node[group, fit=(webapp)(api), label={[font=\small\bfseries\color{secondary}]above:Serving}] {};
+        \node[group, fit=(mlflow)(airflow), label={[font=\small\bfseries\color{secondary}]above:ML Platform}] {};
+        \node[group, fit=(postgres)(minio), label={[font=\small\bfseries\color{secondary}]below:Stockage}] {};
+        \node[group, fit=(prometheus)(grafana), label={[font=\small\bfseries\color{secondary}]above:Monitoring}] {};
+    \end{scope}
+
+\end{tikzpicture}
+\caption{Architecture de la plateforme MLOps}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Justification des choix technologiques}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{p{3cm}p{3cm}p{7cm}}
+\toprule
+\textbf{Composant} & \textbf{Choix} & \textbf{Justification} \\
+\midrule
+Modele ML & XGBoost & Performant sur donnees tabulaires, rapide a entrainer, interpretable via feature importance. Largement utilise en production. \\
+\addlinespace
+Hyperparametres & Optuna & Optimisation bayesienne efficace, pruning automatique des essais non prometteurs, integration native avec XGBoost. \\
+\addlinespace
+Tracking & MLflow & Standard de facto pour le suivi d'experiences ML. Model Registry integre pour la gestion des versions de modeles. \\
+\addlinespace
+Object Storage & MinIO & Compatible S3, leger, auto-heberge. Permet de decoupler le stockage des donnees du systeme de fichiers local. \\
+\addlinespace
+Orchestration & Airflow & DAGs Python natifs, interface web, scheduling flexible. Adapte pour les pipelines de reentrainement periodiques. \\
+\addlinespace
+API & FastAPI & Haute performance (async), validation automatique (Pydantic), documentation OpenAPI generee, support natif de Prometheus. \\
+\addlinespace
+WebApp & Gradio & Prototypage rapide d'interfaces ML, composants preconstruits, ideal pour une demo/POC. \\
+\addlinespace
+Base de donnees & PostgreSQL & Backend robuste partage entre MLflow (tracking store) et Airflow (metadata store). \\
+\addlinespace
+Monitoring & Prometheus + Grafana & Stack standard pour le monitoring d'applications. Prometheus scrape les metriques, Grafana les visualise. \\
+\addlinespace
+CI/CD & GitHub Actions & Integration native avec GitHub, gratuit pour les repos publics, workflows YAML declaratifs. \\
+\addlinespace
+Conteneurisation & Docker Compose + K8s & Compose pour le dev local (simplicite), Kubernetes pour la production (scalabilite, resilience). \\
+\bottomrule
+\end{tabular}
+\caption{Justification des choix technologiques}
+\end{table}
+
+% =====================================================================
+% 3. PIPELINE DE DONNEES
+% =====================================================================
+\section{Pipeline de Donnees}
+
+\subsection{Acquisition}
+
+Les donnees sont telechargees depuis Kaggle via l'API officielle (\texttt{src/data/download.py})
+puis stockees sur MinIO dans le bucket \texttt{mlops-data}. L'authentification Kaggle
+se fait via les variables d'environnement \texttt{KAGGLE\_USERNAME} et \texttt{KAGGLE\_KEY}.
+
+\subsection{Preprocessing}
+
+Le preprocessing (\texttt{src/data/preprocess.py}) suit un pipeline en 5 etapes :
+
+\begin{enumerate}
+    \item \textbf{Nettoyage} -- Parsing des dates, suppression de la colonne \texttt{id},
+          suppression de l'outlier a 33 chambres, imputation des \texttt{NaN} pour \texttt{waterfront}.
+    \item \textbf{Feature engineering} -- Creation de variables derivees :
+          \texttt{house\_age}, \texttt{is\_renovated}, \texttt{years\_since\_renovation},
+          \texttt{has\_basement}, ratios de surface (habitation vs voisins, terrain vs voisins).
+    \item \textbf{Split train/test} -- 80/20, effectue \emph{avant} l'encodage pour eviter le data leakage.
+    \item \textbf{Target Encoding} -- Encodage du code postal via \texttt{TargetEncoder}
+          (ajuste sur le train uniquement).
+    \item \textbf{Transformation cible} -- \texttt{log1p(price)} pour l'entrainement,
+          \texttt{expm1()} a l'inference.
+\end{enumerate}
+
+Les artefacts de preprocessing (encodeur, noms de features) sont sauvegardes sur MinIO
+pour etre reutilises a l'inference.
+
+% =====================================================================
+% 4. MODELE
+% =====================================================================
+\section{Modele et Entrainement}
+
+\subsection{XGBoost + Optuna}
+
+L'entrainement (\texttt{src/model/train.py}) utilise XGBoost avec optimisation
+bayesienne des hyperparametres via Optuna (10 essais par defaut).
+
+Hyperparametres optimises :
+\begin{itemize}
+    \item \texttt{max\_depth} : 3--12
+    \item \texttt{learning\_rate} : 0.01--0.3
+    \item \texttt{n\_estimators} : 100--1000
+    \item \texttt{subsample} : 0.6--1.0
+    \item \texttt{colsample\_bytree} : 0.6--1.0
+    \item \texttt{reg\_alpha} / \texttt{reg\_lambda} : regularisation L1/L2
+\end{itemize}
+
+\subsection{Metriques d'evaluation}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Metrique} & \textbf{Description} \\
+\midrule
+RMSE (prix reel) & Erreur quadratique moyenne sur les prix en dollars \\
+MAE (prix reel) & Erreur absolue moyenne \\
+R\textsuperscript{2} & Coefficient de determination \\
+MAPE & Pourcentage d'erreur moyen \\
+\bottomrule
+\end{tabular}
+\caption{Metriques de performance du modele}
+\end{table}
+
+\subsection{MLflow Tracking}
+
+Chaque run d'entrainement enregistre dans MLflow :
+\begin{itemize}
+    \item Les hyperparametres (params)
+    \item Les metriques sur le jeu de test
+    \item Le modele serialise (artefact XGBoost)
+    \item Les metadonnees (nombre d'echantillons, duree)
+\end{itemize}
+
+Le modele est enregistre dans le \textbf{Model Registry} sous le nom
+\texttt{house-price-xgboost}.
+
+% =====================================================================
+% 5. CONTINUOUS TRAINING
+% =====================================================================
+\section{Continuous Training}
+
+\subsection{Orchestration Airflow}
+
+Deux DAGs Airflow gerent le cycle de vie des donnees et du modele :
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{DAG} & \textbf{Schedule} & \textbf{Role} \\
+\midrule
+\texttt{data\_pipeline} & Hebdomadaire & Verifier fraicheur des donnees, telecharger, valider \\
+\texttt{training\_pipeline} & Declenche & Entrainer, comparer, promouvoir, alerter \\
+\bottomrule
+\end{tabular}
+\caption{DAGs Airflow}
+\end{table}
+
+\subsection{Comparaison de modeles}
+
+Le pipeline de training implemente une logique de \textbf{promotion conditionnelle} :
+
+\begin{enumerate}
+    \item Le nouveau modele est entraine et ses metriques sont calculees sur le jeu de test.
+    \item Le modele en production actuel est charge depuis le Model Registry MLflow.
+    \item Les deux modeles sont compares sur le RMSE (prix reels).
+    \item Le nouveau modele est promu en production \textbf{uniquement s'il est meilleur}.
+    \item Une alerte email est envoyee avec le resultat (promotion ou rejet).
+\end{enumerate}
+
+Cette approche garantit une \textbf{non-regression} : le modele en production
+ne se degrade jamais suite a un reentrainement automatique.
+
+% =====================================================================
+% 6. SERVING
+% =====================================================================
+\section{Serving}
+
+\subsection{API FastAPI}
+
+L'API (\texttt{src/api/app.py}) expose :
+\begin{itemize}
+    \item \texttt{POST /predict} -- Prediction de prix a partir des features
+    \item \texttt{GET /health} -- Healthcheck (etat du modele, URI MLflow)
+    \item \texttt{GET /metrics} -- Metriques Prometheus
+    \item \texttt{GET /docs} -- Documentation OpenAPI (Swagger)
+\end{itemize}
+
+Au demarrage, l'API charge le modele depuis MLflow et les artefacts de preprocessing
+(encodeur, noms de features) depuis MinIO.
+
+\subsection{Interface Gradio}
+
+L'interface web (\texttt{src/webapp/app.py}) permet aux utilisateurs de saisir
+les caracteristiques d'un bien immobilier et d'obtenir une estimation de prix.
+Elle communique avec l'API FastAPI via HTTP.
+
+% =====================================================================
+% 7. MONITORING
+% =====================================================================
+\section{Monitoring}
+
+\subsection{Metriques exposees}
+
+L'API expose 9 metriques Prometheus via \texttt{/metrics} :
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Metrique} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{prediction\_requests\_total} & Counter & Nombre total de requetes \\
+\texttt{prediction\_errors\_total} & Counter & Nombre total d'erreurs \\
+\texttt{prediction\_latency\_seconds} & Histogram & Latence des predictions \\
+\texttt{model\_rmse\_price} & Gauge & RMSE du modele charge \\
+\texttt{model\_r2\_price} & Gauge & R\textsuperscript{2} du modele \\
+\texttt{model\_mae\_price} & Gauge & MAE du modele \\
+\texttt{model\_mape} & Gauge & MAPE du modele \\
+\texttt{training\_runs\_total} & Gauge & Nombre de runs d'entrainement \\
+\texttt{data\_rows\_processed} & Gauge & Lignes de donnees traitees \\
+\bottomrule
+\end{tabular}
+\caption{Metriques Prometheus exposees par l'API}
+\end{table}
+
+\subsection{Dashboard Grafana}
+
+Le dashboard Grafana est structure en 4 sections :
+\begin{enumerate}
+    \item \textbf{KPIs Modele} -- RMSE, MAE, R\textsuperscript{2}, MAPE (vue d'ensemble)
+    \item \textbf{Performance API} -- Compteurs de requetes/erreurs, taux de requetes
+    \item \textbf{Latence} -- Percentiles p50, p95, p99
+    \item \textbf{Entrainement} -- Nombre de runs, lignes de donnees traitees
+\end{enumerate}
+
+% =====================================================================
+% 8. DEPLOIEMENT
+% =====================================================================
+\section{Deploiement}
+
+\subsection{Docker Compose (developpement)}
+
+L'environnement de dev comprend 8 services orchestres par Docker Compose :
+PostgreSQL, MinIO, Airflow, FastAPI, Gradio, Prometheus, Grafana.
+
+Les variables d'environnement sont centralisees via un ancrage YAML
+(\texttt{x-common-env}) et les secrets sont lus depuis le fichier \texttt{.env} local.
+
+\subsection{Kubernetes (production)}
+
+Le deploiement K8s utilise :
+\begin{itemize}
+    \item \textbf{ConfigMaps} pour la configuration non-sensible (URIs, noms d'experiences)
+    \item \textbf{Secrets} (\texttt{app-secrets}) pour les credentials (Postgres, MinIO, Kaggle, SMTP)
+    \item \textbf{PersistentVolumeClaims} pour le stockage persistant (PostgreSQL, MinIO, MLflow, Airflow logs)
+    \item \textbf{NodePort Services} pour l'exposition des services
+    \item \textbf{Health probes} (readiness + liveness) sur chaque deployment
+\end{itemize}
+
+\subsection{Gestion des secrets}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Contexte} & \textbf{Mecanisme} & \textbf{Fichier} \\
+\midrule
+Dev local (sans Docker) & \texttt{.env} + \texttt{python-dotenv} & \texttt{.env} \\
+Docker Compose & \texttt{.env} auto-charge par Compose & \texttt{.env} + \texttt{docker-compose.yml} \\
+Kubernetes & ConfigMap + Secret & \texttt{k8s/secrets.yaml} \\
+GitHub Actions & Repository Secrets & Settings $\rightarrow$ Secrets \\
+\bottomrule
+\end{tabular}
+\caption{Gestion des secrets par environnement}
+\end{table}
+
+% =====================================================================
+% 9. CI/CD
+% =====================================================================
+\section{CI/CD}
+
+\subsection{Pipeline CI}
+
+Declenchee sur chaque push/PR vers \texttt{main} ou \texttt{dev} :
+\begin{enumerate}
+    \item \textbf{Lint} -- Verification du code avec Ruff (linting + formatting)
+    \item \textbf{Tests} -- Execution de pytest avec rapport de couverture
+    \item \textbf{Docker Build} -- Verification que les images Docker se construisent
+\end{enumerate}
+
+\subsection{Pipeline CD}
+
+Declenchee sur chaque tag \texttt{v*} :
+\begin{enumerate}
+    \item Build et push des images Docker vers GitHub Container Registry (GHCR)
+    \item Deploiement sur Kubernetes via \texttt{kubectl apply}
+    \item Verification du rollout (\texttt{kubectl rollout status})
+\end{enumerate}
+
+% =====================================================================
+% 10. CONCLUSION
+% =====================================================================
+\section{Conclusion}
+
+Ce projet demontre la mise en place d'une plateforme MLOps complete couvrant
+l'ensemble du cycle de vie d'un modele de Machine Learning. Les choix
+architecturaux (decoupage en microservices, separation des concerns, infrastructure
+as code) permettent une evolution independante de chaque composant.
+
+Le mecanisme de \textbf{continuous training avec comparaison de modeles} assure
+que le modele en production ne se degrade jamais, garantissant la fiabilite du
+systeme en conditions reelles.
+
+Les axes d'amelioration possibles incluent :
+\begin{itemize}
+    \item A/B testing entre modeles en production
+    \item Monitoring de data drift (Evidently, Great Expectations)
+    \item Autoscaling Kubernetes (HPA) base sur la latence
+    \item Feature store pour la reutilisation des features
+\end{itemize}
+
+\end{document}

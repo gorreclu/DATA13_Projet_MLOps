@@ -1,0 +1,61 @@
+# ===== Environment & Secrets =====
+.env
+*.env
+!.env.example
+k8s/secrets.yaml
+
+# ===== Kaggle token =====
+# Each team member should place their kaggle.json here:
+#   ~/.kaggle/kaggle.json
+# OR set KAGGLE_USERNAME and KAGGLE_KEY in .env
+kaggle.json
+
+# ===== Data =====
+/data/
+*.csv
+*.parquet
+
+# ===== Models (local artifacts) =====
+models/
+mlruns/
+mlartifacts/
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+.uv/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Docker =====
+*.log
+
+# ===== LaTeX auxiliary =====
+*.aux
+*.toc
+*.out
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+
+# ===== PDF du sujet =====
+*.pdf
+namespace-default.yaml

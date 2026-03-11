@@ -1,0 +1,106 @@
+# =============================================================================
+# CD Pipeline: Build & Push Docker images, deploy to K8s
+# =============================================================================
+name: CD
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - service: api
+            dockerfile: src/api/Dockerfile
+          - service: webapp
+            dockerfile: src/webapp/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Get image tag
+        id: tag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Deploy PostgreSQL
+        run: kubectl apply -f k8s/postgresql/
+
+      - name: Deploy MinIO
+        run: kubectl apply -f k8s/minio/
+
+      - name: Deploy Airflow
+        run: kubectl apply -f k8s/airflow/
+
+      - name: Deploy API
+        run: |
+          export IMAGE_TAG=${{ steps.tag.outputs.TAG }}
+          envsubst < k8s/api/deployment.yaml | kubectl apply -f -
+
+      - name: Deploy WebApp
+        run: |
+          export IMAGE_TAG=${{ steps.tag.outputs.TAG }}
+          envsubst < k8s/webapp/deployment.yaml | kubectl apply -f -
+
+      - name: Deploy Monitoring
+        run: kubectl apply -f k8s/monitoring/
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/api --timeout=120s
+          kubectl rollout status deployment/webapp --timeout=120s
+          echo "Deployment complete!"

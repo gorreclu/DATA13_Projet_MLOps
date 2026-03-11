@@ -1,0 +1,158 @@
+# =============================================================================
+# House Price MLOps - Development Environment
+# =============================================================================
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose down            # Stop all services
+#   docker compose logs -f api     # Follow API logs
+# =============================================================================
+
+x-common-env: &common-env
+  MLFLOW_TRACKING_URI: http://89.58.44.97:5000
+  MLFLOW_EXPERIMENT_NAME: house-price-prediction
+  POSTGRES_USER: mlops
+  POSTGRES_PASSWORD: mlops_password
+  POSTGRES_DB: mlops
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_ROOT_USER: minioadmin
+  MINIO_ROOT_PASSWORD: minioadmin
+  MINIO_BUCKET_DATA: mlops-data
+
+services:
+  # --- PostgreSQL (shared by Airflow + MLflow) ---
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mlops
+      POSTGRES_PASSWORD: mlops_password
+      POSTGRES_DB: mlops
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlops"]
+      interval: 5s
+      retries: 5
+
+  # --- MinIO S3 (object storage for training data) ---
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      retries: 5
+
+  # --- Airflow (standalone for dev) ---
+  airflow:
+    image: apache/airflow:2.9.3-python3.11
+    environment:
+      <<: *common-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://mlops:mlops_password@postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ""
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      AIRFLOW__SMTP__SMTP_HOST: smtp.gmail.com
+      AIRFLOW__SMTP__SMTP_PORT: "587"
+      AIRFLOW__SMTP__SMTP_STARTTLS: "true"
+      AIRFLOW__SMTP__SMTP_SSL: "false"
+      AIRFLOW__SMTP__SMTP_USER: ${SMTP_EMAIL:-}
+      AIRFLOW__SMTP__SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      AIRFLOW__SMTP__SMTP_MAIL_FROM: ${SMTP_EMAIL:-airflow@example.com}
+      KAGGLE_USERNAME: ${KAGGLE_USERNAME:-}
+      KAGGLE_KEY: ${KAGGLE_KEY:-}
+      PYTHONPATH: /opt/airflow
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+    command: >
+      bash -c "pip install --no-cache-dir boto3 pyarrow pandas numpy scikit-learn xgboost optuna category-encoders mlflow kaggle joblib python-dotenv &&
+      airflow standalone"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      - airflow_logs:/opt/airflow/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # --- FastAPI Serving ---
+  api:
+    build:
+      context: .
+      dockerfile: src/api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *common-env
+    depends_on:
+      - postgres
+      - minio
+
+  # --- Gradio WebApp ---
+  webapp:
+    build:
+      context: .
+      dockerfile: src/webapp/Dockerfile
+    ports:
+      - "7860:7860"
+    environment:
+      <<: *common-env
+      API_HOST: api
+      API_PORT: "8000"
+    depends_on:
+      - api
+
+  # --- Prometheus ---
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./k8s/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+
+  # --- Grafana ---
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  airflow_logs:
+  minio_data:
+  prometheus_data:
+  grafana_data:

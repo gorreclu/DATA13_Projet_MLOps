@@ -1,0 +1,328 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /etc/grafana/provisioning/dashboards
+          foldersFromFilesStructure: false
+  house-price-mlops.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "type": "row",
+          "title": "Model Performance",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "title": "R2 Score",
+          "description": "Coefficient of determination (closer to 1 is better)",
+          "type": "gauge",
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
+          "targets": [{ "expr": "model_r2_price", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0, "max": 1, "decimals": 4,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 0.7 },
+                  { "color": "yellow", "value": 0.85 },
+                  { "color": "green", "value": 0.9 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "RMSE (USD)",
+          "description": "Root Mean Squared Error on real prices",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 },
+          "targets": [{ "expr": "model_rmse_price", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD", "decimals": 0,
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 100000 },
+                  { "color": "orange", "value": 150000 },
+                  { "color": "red", "value": 200000 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "MAE (USD)",
+          "description": "Mean Absolute Error on real prices",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 12, "y": 1 },
+          "targets": [{ "expr": "model_mae_price", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD", "decimals": 0,
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 60000 },
+                  { "color": "orange", "value": 100000 },
+                  { "color": "red", "value": 150000 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "MAPE",
+          "description": "Mean Absolute Percentage Error",
+          "type": "gauge",
+          "gridPos": { "h": 6, "w": 6, "x": 18, "y": 1 },
+          "targets": [{ "expr": "model_mape", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent", "decimals": 1, "min": 0, "max": 50,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 10 },
+                  { "color": "orange", "value": 15 },
+                  { "color": "red", "value": 25 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "row",
+          "title": "API Requests",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "title": "Total Requests",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 4, "x": 0, "y": 8 },
+          "targets": [{ "expr": "prediction_requests_total", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "green", "value": 100 },
+                  { "color": "yellow", "value": 1000 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Total Errors",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 4, "x": 4, "y": 8 },
+          "targets": [{ "expr": "prediction_errors_total", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 5 },
+                  { "color": "red", "value": 20 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Error Rate",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 4, "x": 8, "y": 8 },
+          "targets": [{ "expr": "prediction_errors_total / prediction_requests_total * 100", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent", "decimals": 2,
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Request & Error Rate (req/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            { "expr": "rate(prediction_requests_total[5m])", "legendFormat": "Requests / sec", "refId": "A" },
+            { "expr": "rate(prediction_errors_total[5m])", "legendFormat": "Errors / sec", "refId": "B" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Errors / sec" },
+                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+              }
+            ]
+          }
+        },
+        {
+          "type": "row",
+          "title": "Prediction Latency",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "title": "Latency Percentiles (p50 / p95 / p99)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 16, "x": 0, "y": 17 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, rate(prediction_latency_seconds_bucket[5m]))", "legendFormat": "p50 (median)", "refId": "A" },
+            { "expr": "histogram_quantile(0.95, rate(prediction_latency_seconds_bucket[5m]))", "legendFormat": "p95", "refId": "B" },
+            { "expr": "histogram_quantile(0.99, rate(prediction_latency_seconds_bucket[5m]))", "legendFormat": "p99", "refId": "C" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "gradientMode": "scheme" }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "p50 (median)" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
+              { "matcher": { "id": "byName", "options": "p95" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+              { "matcher": { "id": "byName", "options": "p99" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+            ]
+          }
+        },
+        {
+          "title": "Avg Latency (5m)",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 17 },
+          "targets": [{ "expr": "rate(prediction_latency_seconds_sum[5m]) / rate(prediction_latency_seconds_count[5m])", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s", "decimals": 3,
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.1 },
+                  { "color": "orange", "value": 0.5 },
+                  { "color": "red", "value": 1.0 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "p99 Latency (5m)",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 21 },
+          "targets": [{ "expr": "histogram_quantile(0.99, rate(prediction_latency_seconds_bucket[5m]))", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s", "decimals": 3,
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.25 },
+                  { "color": "orange", "value": 1.0 },
+                  { "color": "red", "value": 2.5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "row",
+          "title": "Training & Data",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "title": "Training Runs",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 8, "x": 0, "y": 26 },
+          "targets": [{ "expr": "training_runs_total", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }, { "color": "green", "value": 1 }] }
+            }
+          }
+        },
+        {
+          "title": "Training Data Rows",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 8, "x": 8, "y": 26 },
+          "targets": [{ "expr": "data_rows_processed", "refId": "A" }],
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }, { "color": "green", "value": 10000 }] }
+            }
+          }
+        },
+        {
+          "title": "Model Overview",
+          "description": "Summary table of all model metrics",
+          "type": "table",
+          "gridPos": { "h": 5, "w": 8, "x": 16, "y": 26 },
+          "targets": [
+            { "expr": "model_rmse_price", "legendFormat": "RMSE", "refId": "A", "instant": true },
+            { "expr": "model_mae_price", "legendFormat": "MAE", "refId": "B", "instant": true },
+            { "expr": "model_r2_price", "legendFormat": "R2", "refId": "C", "instant": true },
+            { "expr": "model_mape", "legendFormat": "MAPE", "refId": "D", "instant": true }
+          ],
+          "transformations": [{ "id": "reduce", "options": { "reducers": ["lastNotNull"], "includeTimeField": false } }],
+          "fieldConfig": { "defaults": { "decimals": 2 } }
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["mlops", "house-price"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "refresh": "30s",
+      "title": "House Price MLOps Dashboard",
+      "uid": "house-price-mlops"
+    }
